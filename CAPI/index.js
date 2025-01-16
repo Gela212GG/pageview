@@ -1,17 +1,19 @@
-// Import library
 import express from 'express';
 import bodyParser from 'body-parser';
 import fetch from 'node-fetch';
+import cors from 'cors'; // Import cors
 
 const app = express();
 
 // Middleware untuk parsing JSON
 app.use(bodyParser.json());
 
-// Fungsi untuk menghasilkan event_id unik
-function generateEventId() {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-}
+// Middleware CORS
+app.use(cors({
+    origin: '*', // Ganti dengan domain asal Anda
+    methods: 'GET,POST,OPTIONS', // Metode HTTP yang diizinkan
+    allowedHeaders: 'Content-Type,Authorization' // Header yang diizinkan
+}));
 
 // Endpoint untuk Root Path
 app.get('/', (req, res) => {
@@ -23,19 +25,16 @@ app.post('/capi', async (req, res) => {
     console.log('Data diterima:', req.body);
 
     try {
-        const fbp = req.body.user_data?.fbp;
-        const fbc = req.body.user_data?.fbc;
-
         const payload = {
             event_name: req.body.event_name,
             user_data: {
-                ...(fbp && { fbp }), // Kirim fbp hanya jika ada
-                ...(fbc && { fbc }), // Kirim fbc hanya jika ada
+                fbp: req.body.user_data.fbp,
+                fbc: req.body.user_data.fbc,
                 client_ip_address: req.ip,
                 client_user_agent: req.get('User-Agent'),
             },
             event_time: Math.floor(Date.now() / 1000),
-            event_id: generateEventId(),
+            event_id: req.body.event_id || 'event_' + Math.random().toString(36).substring(2),
         };
 
         console.log('Payload ke API tujuan:', payload);
@@ -55,6 +54,6 @@ app.post('/capi', async (req, res) => {
     }
 });
 
-// Jalankan server di port 3000 atau port default dari Replit
+// Jalankan server di port 3000 atau port default
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server berjalan di port ${PORT}`));
