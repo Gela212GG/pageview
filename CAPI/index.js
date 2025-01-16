@@ -18,7 +18,7 @@ app.post('/capi', async (req, res) => {
     console.log('Data diterima:', req.body);
 
     try {
-        const response = await fetch('https://tsusukgigi.top/api/capi_pageview.php', {
+        const response = await fetch('https://tusukgigi.top/api/capi_pageview.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(req.body)
