@@ -23,11 +23,14 @@ app.post('/capi', async (req, res) => {
     console.log('Data diterima:', req.body);
 
     try {
+        const fbp = req.body.user_data?.fbp;
+        const fbc = req.body.user_data?.fbc;
+
         const payload = {
             event_name: req.body.event_name,
             user_data: {
-                fbp: req.body.user_data.fbp, // Tambahkan fbp
-                fbc: req.body.user_data.fbc, // Tambahkan fbc
+                ...(fbp && { fbp }), // Kirim fbp hanya jika ada
+                ...(fbc && { fbc }), // Kirim fbc hanya jika ada
                 client_ip_address: req.ip,
                 client_user_agent: req.get('User-Agent'),
             },
