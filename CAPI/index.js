@@ -34,8 +34,8 @@ app.post('/capi', async (req, res) => {
             user_data: {
                 ...(req.body.user_data.fbp && { fbp: req.body.user_data.fbp }),
                 ...(req.body.user_data.fbc && { fbc: req.body.user_data.fbc }),
-                client_ip_address: req.ip,
-                client_user_agent: req.get('User-Agent'),
+                client_ip_address: req.body.user_data.client_ip_address || req.ip,
+                client_user_agent: req.body.user_data.client_user_agent || req.get('User-Agent'),
             },
             event_time: Math.floor(Date.now() / 1000),
             event_id: req.body.event_id || 'event_' + Math.random().toString(36).substring(2),
