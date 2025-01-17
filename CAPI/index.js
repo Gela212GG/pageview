@@ -2,6 +2,10 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import fetch from 'node-fetch';
 import cors from 'cors'; // Import cors
+import dotenv from 'dotenv'; // Import dotenv
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 
@@ -39,10 +43,13 @@ app.post('/capi', async (req, res) => {
 
         console.log('Payload ke API tujuan:', payload);
 
-        const response = await fetch('https://tusukgigi.top/api/capi_pageview.php', {
+        const response = await fetch(`https://graph.facebook.com/v13.0/${process.env.PIXEL_ID}/events`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
+            },
+            body: JSON.stringify({ data: [payload] }),
         });
 
         const responseData = await response.json();
