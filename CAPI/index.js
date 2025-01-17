@@ -1,39 +1,39 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import fetch from 'node-fetch';
-import cors from 'cors'; // Import cors
-import dotenv from 'dotenv'; // Import dotenv
+import cors from 'cors';
+import dotenv from 'dotenv';
 
-// Load environment variables
 dotenv.config();
 
 const app = express();
 
-// Middleware untuk parsing JSON
 app.use(bodyParser.json());
+app.use(
+    cors({
+        origin: '*', // Ubah dengan domain asal Anda jika diketahui
+        methods: 'GET,POST,OPTIONS',
+        allowedHeaders: 'Content-Type,Authorization',
+    })
+);
 
-// Middleware CORS
-app.use(cors({
-    origin: '*', // Ganti dengan domain asal Anda
-    methods: 'GET,POST,OPTIONS', // Metode HTTP yang diizinkan
-    allowedHeaders: 'Content-Type,Authorization' // Header yang diizinkan
-}));
-
-// Endpoint untuk Root Path
 app.get('/', (req, res) => {
     res.send('Server berjalan dengan benar. Gunakan endpoint POST /capi untuk mengirim data.');
 });
 
-// Endpoint menerima data dari GTM
 app.post('/capi', async (req, res) => {
     console.log('Data diterima:', req.body);
+
+    if (!req.body.event_name) {
+        return res.status(400).send({ error: 'event_name is required' });
+    }
 
     try {
         const payload = {
             event_name: req.body.event_name,
             user_data: {
-                fbp: req.body.user_data.fbp,
-                fbc: req.body.user_data.fbc,
+                ...(req.body.user_data.fbp && { fbp: req.body.user_data.fbp }),
+                ...(req.body.user_data.fbc && { fbc: req.body.user_data.fbc }),
                 client_ip_address: req.ip,
                 client_user_agent: req.get('User-Agent'),
             },
@@ -61,6 +61,5 @@ app.post('/capi', async (req, res) => {
     }
 });
 
-// Jalankan server di port 3000 atau port default
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server berjalan di port ${PORT}`));
