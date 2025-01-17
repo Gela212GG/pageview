@@ -24,6 +24,14 @@ app.get('/', (req, res) => {
 app.post('/capi', async (req, res) => {
     console.log('Data diterima:', req.body);
 
+    // Menentukan IP Client
+    const clientIp = req.headers['x-forwarded-for'] || req.ip;
+    if (clientIp === '::1') {
+        console.log('Request berasal dari server internal.');
+    } else {
+        console.log('Request dari pengguna eksternal:', clientIp);
+    }
+
     if (!req.body.event_name) {
         return res.status(400).send({ error: 'event_name is required' });
     }
@@ -34,7 +42,7 @@ app.post('/capi', async (req, res) => {
             user_data: {
                 ...(req.body.user_data.fbp && { fbp: req.body.user_data.fbp }),
                 ...(req.body.user_data.fbc && { fbc: req.body.user_data.fbc }),
-                client_ip_address: req.ip,
+                client_ip_address: clientIp, // Gunakan IP yang ditentukan
                 client_user_agent: req.get('User-Agent'),
             },
             event_time: Math.floor(Date.now() / 1000),
