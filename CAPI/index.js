@@ -9,16 +9,14 @@ dotenv.config();
 const app = express();
 
 app.use(bodyParser.json());
-app.use(
-    cors({
-        origin: '*', // Ubah dengan domain asal Anda jika diketahui
-        methods: 'GET,POST,OPTIONS',
-        allowedHeaders: 'Content-Type,Authorization',
-    })
-);
+app.use(cors({
+    origin: '*',
+    methods: 'GET,POST,OPTIONS',
+    allowedHeaders: 'Content-Type,Authorization',
+}));
 
 app.get('/', (req, res) => {
-    res.send('Server berjalan dengan benar. Gunakan endpoint POST /capi untuk mengirim data.');
+    res.send('Server berjalan dengan benar.');
 });
 
 app.post('/capi', async (req, res) => {
