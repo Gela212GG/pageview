@@ -1,3 +1,31 @@
+import express from 'express';
+import bodyParser from 'body-parser';
+import fetch from 'node-fetch';
+import cors from 'cors';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const app = express(); // Pastikan app dideklarasikan di sini
+
+app.use(bodyParser.json());
+app.use(cors({
+    origin: '*',
+    methods: 'GET,POST,OPTIONS',
+    allowedHeaders: 'Content-Type,Authorization',
+}));
+
+// Endpoint dasar untuk mengecek server berjalan
+app.get('/', (req, res) => {
+    res.send('Server berjalan dengan benar.');
+});
+
+// Validasi format fbc
+function isValidFbc(fbc) {
+    return /^fb\.1\.\d+\.\w+$/.test(fbc); // Format: fb.1.<timestamp>.<fbclid>
+}
+
+// Endpoint untuk menerima data CAPI
 app.post('/capi', async (req, res) => {
     console.log('Data diterima:', req.body);
 
@@ -6,8 +34,9 @@ app.post('/capi', async (req, res) => {
     }
 
     try {
+        // Data pengguna
         const user_data = {
-            client_ip_address: req.body.user_data.client_ip_address || req.ip, // Tambahkan fallback ke req.ip
+            client_ip_address: req.body.user_data.client_ip_address || req.ip,
             client_user_agent: req.body.user_data.client_user_agent || req.get('User-Agent'),
         };
 
@@ -19,6 +48,7 @@ app.post('/capi', async (req, res) => {
             user_data.fbc = req.body.user_data.fbc;
         }
 
+        // Payload untuk dikirimkan ke Facebook API
         const payload = {
             event_name: req.body.event_name,
             event_time: Math.floor(Date.now() / 1000), // Waktu dalam detik
@@ -28,6 +58,7 @@ app.post('/capi', async (req, res) => {
 
         console.log('Payload ke API tujuan:', payload);
 
+        // Kirim data ke Facebook API
         const response = await fetch(`https://graph.facebook.com/v13.0/${process.env.PIXEL_ID}/events`, {
             method: 'POST',
             headers: {
@@ -45,3 +76,7 @@ app.post('/capi', async (req, res) => {
         res.status(500).send({ error: 'Error mengirim data ke API' });
     }
 });
+
+// Jalankan server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server berjalan di port ${PORT}`));
