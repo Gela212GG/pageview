@@ -1,29 +1,3 @@
-import express from 'express';
-import bodyParser from 'body-parser';
-import fetch from 'node-fetch';
-import cors from 'cors';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
-const app = express();
-
-app.use(bodyParser.json());
-app.use(cors({
-    origin: '*',
-    methods: 'GET,POST,OPTIONS',
-    allowedHeaders: 'Content-Type,Authorization',
-}));
-
-app.get('/', (req, res) => {
-    res.send('Server berjalan dengan benar.');
-});
-
-// Validasi format fbc
-function isValidFbc(fbc) {
-    return /^fb\.1\.\d+\.\w+$/.test(fbc); // Format: fb.1.<timestamp>.<fbclid>
-}
-
 app.post('/capi', async (req, res) => {
     console.log('Data diterima:', req.body);
 
@@ -33,7 +7,7 @@ app.post('/capi', async (req, res) => {
 
     try {
         const user_data = {
-            client_ip_address: req.body.user_data.client_ip_address || req.ip,
+            client_ip_address: req.body.user_data.client_ip_address || req.ip, // Tambahkan fallback ke req.ip
             client_user_agent: req.body.user_data.client_user_agent || req.get('User-Agent'),
         };
 
@@ -71,6 +45,3 @@ app.post('/capi', async (req, res) => {
         res.status(500).send({ error: 'Error mengirim data ke API' });
     }
 });
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server berjalan di port ${PORT}`));
