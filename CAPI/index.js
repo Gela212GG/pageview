@@ -1,151 +1,122 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import fetch from 'node-fetch';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import fs from 'fs';
+import axios from 'axios';
+import helmet from 'helmet';
+import requestIp from 'request-ip';
+import axiosRetry from 'axios-retry';
+import cookieParser from 'cookie-parser';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const PIXEL_ID = process.env.PIXEL_ID;
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const PORT = process.env.PORT || 4000;
 
-if (!PIXEL_ID || !ACCESS_TOKEN) {
-    console.error('❌ Error: PIXEL_ID atau ACCESS_TOKEN tidak ditemukan dalam environment variables.');
-    process.exit(1);
-}
-
-app.use(bodyParser.json());
 app.use(cors({
-    origin: '*',
-    methods: 'GET,POST,OPTIONS',
-    allowedHeaders: 'Content-Type,Authorization',
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Middleware CORS untuk menangani preflight request
 app.options('*', (req, res) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.sendStatus(200);
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.sendStatus(200);
 });
 
-// Fungsi untuk hash SHA256
+app.use(helmet());
+app.use(bodyParser.json());
+app.use(requestIp.mw());
+app.use(cookieParser());
+axiosRetry(axios, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
+
+// Example: middleware untuk log request
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+// Fungsi bantu
 function hashSHA256(value) {
-    return value ? crypto.createHash('sha256').update(value.toLowerCase().trim()).digest('hex') : null;
+  return value ? crypto.createHash('sha256').update(value.toLowerCase().trim()).digest('hex') : null;
 }
 
-// Validasi format FBC
-function isValidFbc(fbc) {
-    return /^fb\.1\.\d+\.\w+$/.test(fbc);
+function getClientIP(req) {
+  const xff = req.headers['x-forwarded-for'];
+  if (xff) {
+    const ips = xff.split(',');
+    return ips[0].trim();
+  }
+  return requestIp.getClientIp(req);
 }
 
-// **CAPI PageView** (Endpoint tetap)
+function sanitizeUserData(userData) {
+  if (userData.country) {
+    userData.country = hashSHA256(userData.country);
+  }
+  return Object.fromEntries(Object.entries(userData).filter(([_, v]) => v !== undefined && v !== null));
+}
+
+// Validasi FBP / FBC
+function validateFBData(body) {
+  let fbp = body.fbp || body.user_data?.fbp;
+  let fbc = body.fbc || body.user_data?.fbc;
+
+  if (fbp && !/^fb\.1\.\d+\.\d+$/.test(fbp)) {
+    return { error: true, message: 'Invalid FBP format' };
+  }
+  if (fbc && !/^fb\.1\.\d+\.[a-zA-Z0-9_-]+$/.test(fbc)) {
+    fbc = undefined;
+  }
+  return { error: false, fbp, fbc };
+}
+
+// Route untuk PageView
 app.post('/capi', async (req, res) => {
-    console.log('📥 Data PageView diterima:', req.body);
+  const body = req.body;
+  if (!body.event_id) {
+    return res.status(400).json({ error: 'event_id wajib disertakan' });
+  }
+  const { error, fbp, fbc, message } = validateFBData(body);
+  if (error) {
+    return res.status(400).json({ error: message });
+  }
 
-    if (!req.body.event_name) {
-        return res.status(400).send({ error: 'event_name is required' });
+  const clientIP = getClientIP(req);
+  const user_data = sanitizeUserData({
+    client_user_agent: req.headers['user-agent'] || 'unknown',
+    client_ip_address: clientIP || null,
+    fbp,
+    fbc,
+    country: body.user_data?.country || null
+  });
+
+  const payload = {
+    event_name: 'PageView',
+    event_time: Math.floor(Date.now() / 1000),
+    event_id: body.event_id,
+    user_data,
+    custom_data: {
+      source: 'website'
     }
+  };
 
-    try {
-        const user_data = {
-            client_ip_address: req.body.user_data.client_ip_address || req.ip,
-            client_user_agent: req.body.user_data.client_user_agent || req.get('User-Agent'),
-        };
-
-        if (req.body.user_data.fbp) {
-            user_data.fbp = req.body.user_data.fbp;
-        }
-        if (req.body.user_data.fbc && isValidFbc(req.body.user_data.fbc)) {
-            user_data.fbc = req.body.user_data.fbc;
-        }
-
-        const payload = {
-            event_name: req.body.event_name,
-            event_time: Math.floor(Date.now() / 1000),
-            event_id: req.body.event_id || 'event_' + Math.random().toString(36).substring(2),
-            user_data: user_data,
-        };
-
-        console.log('📡 Payload ke Facebook API:', payload);
-
-        const response = await fetch(`https://graph.facebook.com/v13.0/${PIXEL_ID}/events`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${ACCESS_TOKEN}`,
-            },
-            body: JSON.stringify({ data: [payload] }),
-        });
-
-        const responseData = await response.json();
-        console.log('✅ Response dari API:', responseData);
-        res.status(200).send(responseData);
-    } catch (err) {
-        console.error('❌ Error saat fetch:', err);
-        res.status(500).send({ error: 'Error mengirim data ke API' });
-    }
+  try {
+    const response = await axios.post(
+      `https://graph.facebook.com/v20.0/${process.env.MABAR_PIXEL_ID}/events`,
+      { data: [payload], access_token: process.env.MABAR_ACCESS_TOKEN }
+    );
+    console.log('CAPI PageView sent:', payload);
+    res.status(200).json({ success: true, data: response.data });
+  } catch (err) {
+    console.error('Error sending PageView to Meta:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Error mengirim data ke Meta' });
+  }
 });
 
-// **CAPI Pendaftaran (CompleteRegistration)**
-app.post('/capi-pendaftaran', async (req, res) => {
-    console.log('📥 Data Pendaftaran diterima:', req.body);
-
-    if (!req.body.event_name || req.body.event_name !== 'CompleteRegistration') {
-        return res.status(400).send({ error: 'Invalid event_name, harus "CompleteRegistration"' });
-    }
-
-    if (!req.body.event_time || typeof req.body.event_time !== 'number' || req.body.event_time < 1000000000) {
-        return res.status(400).send({ error: 'Invalid event_time' });
-    }
-
-    try {
-        const user_data = {
-            em: req.body.user_data.em ? hashSHA256(req.body.user_data.em) : null,
-            ph: req.body.user_data.ph ? hashSHA256(req.body.user_data.ph) : null,
-            client_ip_address: req.body.user_data.client_ip_address || req.ip,
-            client_user_agent: req.body.user_data.client_user_agent || req.get('User-Agent'),
-            fbp: req.body.user_data.fbp,
-            fbc: isValidFbc(req.body.user_data.fbc) ? req.body.user_data.fbc : null,
-        };
-
-        const payload = {
-            event_name: "CompleteRegistration",
-            event_time: req.body.event_time,
-            user_data: user_data,
-            custom_data: {
-                currency: req.body.custom_data?.currency || "IDR",
-                value: req.body.custom_data?.value || 0,
-            }
-        };
-
-        console.log('📡 Payload ke Facebook API:', payload);
-
-        const response = await fetch(`https://graph.facebook.com/v13.0/${PIXEL_ID}/events`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${ACCESS_TOKEN}`,
-            },
-            body: JSON.stringify({ data: [payload] }),
-        });
-
-        const responseData = await response.json();
-        console.log('✅ Response dari API:', responseData);
-
-        // Simpan log ke file
-        fs.appendFileSync('capi_pendaftaran.log', JSON.stringify({ request: req.body, payload, response: responseData }) + '\n');
-
-        res.status(200).send(responseData);
-    } catch (err) {
-        console.error('❌ Error mengirim data ke Facebook:', err);
-        res.status(500).send({ error: 'Gagal mengirim data ke Facebook' });
-    }
+app.listen(PORT, () => {
+  console.log(`Server CAPI berjalan pada port ${PORT}`);
 });
-
-// Jalankan server
-app.listen(PORT, () => console.log(`🚀 Server berjalan di port ${PORT}`));
