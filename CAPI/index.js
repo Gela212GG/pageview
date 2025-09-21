@@ -111,6 +111,7 @@ app.post('/capi', async (req, res) => {
     );
     console.log('CAPI PageView sent:', payload);
     res.status(200).json({ success: true, data: response.data });
+      console.log(`🔍 fbp: ${fbp}, fbc: ${fbc}, IP: ${clientIP}`);
   } catch (err) {
     console.error('Error sending PageView to Meta:', err.response?.data || err.message);
     res.status(500).json({ error: 'Error mengirim data ke Meta' });
@@ -120,3 +121,4 @@ app.post('/capi', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server CAPI berjalan pada port ${PORT}`);
 });
+
